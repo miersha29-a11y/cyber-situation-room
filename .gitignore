@@ -1,0 +1,79 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# SQLite / local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Frontend dependencies
+frontend/node_modules/
+
+# Frontend build output
+frontend/dist/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+
+# Recovery / historical application variants
+frontend/archive_app_variants/
+frontend/source_recovery/
+backend/archive_main_variants/
+
+# Project archives
+phase5_archive/
+
+# Large generated inventory
+project_files.txt
+
+# Research / historical artifacts
+research_archive/
+
+
+# Archived backend artifacts
+backend/archive_node_artifacts/
+
+
+# Historical frontend source variants
+frontend/App_before_*.tsx
+frontend/App_correlation_*.tsx
+frontend/App_final_*.tsx
+frontend/App_fixed_*.tsx
+frontend/App_interactive_*.tsx
+frontend/App_latest_*.tsx
+frontend/App_master_*.tsx
+frontend/App_mitre_*.tsx
+
