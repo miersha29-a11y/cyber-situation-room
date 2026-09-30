@@ -1,6 +1,10 @@
-﻿# Cyber Situation Room
+# Cyber Situation Room
 
 A cybersecurity threat intelligence and vulnerability analysis platform designed to support SOC and CTI analyst workflows.
+
+## Dashboard
+
+![Cyber Situation Room Dashboard](docs/dashboard.png)
 
 ## Overview
 
