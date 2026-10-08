@@ -6,6 +6,10 @@ A cybersecurity threat intelligence and vulnerability analysis platform designed
 
 ![Cyber Situation Room Dashboard](docs/dashboard.png)
 
+## Architecture
+
+![Cyber Situation Room Architecture](docs/architecture.png)
+
 ## Overview
 
 Cyber Situation Room combines threat intelligence, vulnerability intelligence, CISA advisories, NVD CVEs, CISA KEV data, correlation analysis, risk scoring, and MITRE ATT&CK evidence into an analyst-focused dashboard.
