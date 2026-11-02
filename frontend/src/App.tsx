@@ -1,5 +1,6 @@
-﻿import { API_BASE_URL } from './config';
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { API_BASE_URL, fetchJson } from "./api";
 import {
   PieChart,
   Pie,
@@ -312,6 +313,99 @@ function formatThreatDate(dateString: string | null) {
 
 
 
+/* ==========================================================
+   DATA SHAPING HELPERS
+   ========================================================== */
+
+const KNOWN_SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+
+function buildSeverityData(cves: CVE[]): SeverityData[] {
+  const count = (severity: string) =>
+    cves.filter((cve) => cve.severity === severity).length;
+
+  return [
+    { name: "Critical", value: count("CRITICAL") },
+    { name: "High", value: count("HIGH") },
+    { name: "Medium", value: count("MEDIUM") },
+    { name: "Low", value: count("LOW") },
+    {
+      name: "Unknown",
+      value: cves.filter(
+        (cve) => !cve.severity || !KNOWN_SEVERITIES.includes(cve.severity)
+      ).length,
+    },
+  ];
+}
+
+function normalizeRiskSummary(data: Partial<RiskSummary> | undefined): RiskSummary {
+  return {
+    critical: Number(data?.critical ?? 0),
+    high: Number(data?.high ?? 0),
+    medium: Number(data?.medium ?? 0),
+    low: Number(data?.low ?? 0),
+    known_exploited: Number(data?.known_exploited ?? 0),
+    total: Number(data?.total ?? 0),
+    nvd_critical: Number(data?.nvd_critical ?? 0),
+    nvd_high: Number(data?.nvd_high ?? 0),
+    nvd_medium: Number(data?.nvd_medium ?? 0),
+    nvd_low: Number(data?.nvd_low ?? 0),
+    priority_risks: Number(data?.priority_risks ?? 0),
+  };
+}
+
+// The backend returns only dates that contain CVEs. Build a contiguous
+// calendar series so each range represents the requested number of
+// calendar days instead of collapsing to active dates only.
+function buildTimeline(
+  data: { date: string; count: number }[],
+  range: number
+): TimelineData[] {
+  const countsByDate = new Map(
+    data.map((item) => [item.date, Number(item.count) || 0])
+  );
+
+  const validDates = data
+    .map((item) => item.date)
+    .filter(Boolean)
+    .sort();
+
+  if (validDates.length === 0) {
+    return [];
+  }
+
+  const end = new Date(`${validDates[validDates.length - 1]}T00:00:00`);
+  const timeline: TimelineData[] = [];
+
+  for (let offset = range - 1; offset >= 0; offset -= 1) {
+    const date = new Date(end);
+    date.setDate(end.getDate() - offset);
+
+    const isoDate = [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0"),
+    ].join("-");
+
+    const count = countsByDate.get(isoDate) ?? 0;
+    const recentCounts = timeline
+      .slice(Math.max(0, timeline.length - 6))
+      .map((item) => item.count);
+    const movingValues = [...recentCounts, count];
+    const movingAverage =
+      movingValues.reduce((sum, value) => sum + value, 0) /
+      movingValues.length;
+
+    timeline.push({
+      date: isoDate,
+      count,
+      movingAverage: Number(movingAverage.toFixed(1)),
+    });
+  }
+
+  return timeline;
+}
+
+
 function App() {
   const scrollToSection = (id: string) => {
     const headingMap: Record<string, string> = {
@@ -354,96 +448,21 @@ function App() {
     });
   };
 
-  const [severityData, setSeverityData] =
-    useState<SeverityData[]>([]);
-
+  /* ==========================================================
+     UI STATE
+     ========================================================== */
 
   const [selectedRange, setSelectedRange] =
     useState<RangeOption>(30);
 
-
-  const [
-    prioritizedVulnerabilities,
-    setPrioritizedVulnerabilities,
-  ] =
-    useState<PrioritizedVulnerability[]>(
-      []
-    );
-
-
-  const [riskSummary, setRiskSummary] =
-    useState<RiskSummary>({
-      critical: 35,
-      high: 13,
-      medium: 19934,
-      low: 10295,
-      known_exploited: 51,
-      total: 30277,
-      nvd_critical: 3869,
-      nvd_high: 12100,
-      nvd_medium: 10208,
-      nvd_low: 1054,
-      priority_risks: 48,
-    });
-
-
-  const [
-    vulnerabilityLoading,
-    setVulnerabilityLoading,
-  ] = useState(true);
-
-
   const [selectedCVE, setSelectedCVE] =
-    useState<PrioritizedVulnerability | null>(
-      null
-    );
-
+    useState<PrioritizedVulnerability | null>(null);
 
   const [riskDebug, setRiskDebug] =
     useState<RiskDebug | null>(null);
 
-
   const [detailLoading, setDetailLoading] =
     useState(false);
-
-
-  const [correlationGraph, setCorrelationGraph] =
-    useState<CorrelationGraphResponse | null>(null);
-
-  const [correlationGraphLoading, setCorrelationGraphLoading] =
-    useState(true);
-
-  const [correlationGraphError, setCorrelationGraphError] =
-    useState<string | null>(null);
-
-  /* ==========================================================
-     THREAT INTELLIGENCE STATE
-     ========================================================== */
-
-  const [
-    threatEvents,
-    setThreatEvents,
-  ] = useState<ThreatEvent[]>([]);
-
-
-  const [
-    threatSummary,
-    setThreatSummary,
-  ] = useState<ThreatSummary>({
-    total: 0,
-    critical: 0,
-    high: 0,
-    medium: 0,
-    low: 0,
-    event_types: {},
-    sources: {},
-  });
-
-
-  const [
-    threatLoading,
-    setThreatLoading,
-  ] = useState(true);
 
   const [threatSeverityFilter, setThreatSeverityFilter] =
     useState("ALL");
@@ -460,424 +479,145 @@ function App() {
   const [threatTypeFilter, setThreatTypeFilter] =
     useState("ALL");
 
-  const [intelligenceAnalysis, setIntelligenceAnalysis] =
-    useState<IntelligenceAnalysis | null>(null);
-
-  const [intelligenceAnalysisLoading, setIntelligenceAnalysisLoading] =
-    useState(true);
-
-  const [mitreAttackAnalysis, setMitreAttackAnalysis] =
-    useState<MitreAttackAnalysis | null>(null);
-
-  const [mitreAttackLoading, setMitreAttackLoading] =
-    useState(true);
-
-
   /* ==========================================================
-     FETCH CVE DATA
+     SERVER DATA (TanStack React Query)
+     Each query is cached, de-duplicated and retried by React
+     Query, so no component state is set inside effects.
      ========================================================== */
 
-  useEffect(() => {
+  const cvesQuery = useQuery({
+    queryKey: ["cves", 500],
+    queryFn: ({ signal }) =>
+      fetchJson<CVE[]>("/cves?limit=500", signal),
+  });
 
-    fetch(
-      `${API_BASE_URL}/cves?limit=500`
-    )
-      .then((response) => {
+  // The browser receives only a bounded recent dataset.
+  // Global KPI values come from /vulnerabilities/risk-summary.
+  const severityData = useMemo<SeverityData[]>(
+    () => (cvesQuery.data ? buildSeverityData(cvesQuery.data) : []),
+    [cvesQuery.data]
+  );
 
-        if (!response.ok) {
-          throw new Error(
-            "Failed to fetch CVE data"
-          );
-        }
+  const prioritizedQuery = useQuery({
+    queryKey: ["vulnerabilities", "prioritized", 10],
+    queryFn: ({ signal }) =>
+      fetchJson<PrioritizedVulnerability[]>(
+        "/vulnerabilities/prioritized?limit=10",
+        signal
+      ),
+  });
 
-        return response.json();
-      })
+  const prioritizedVulnerabilities = useMemo(
+    () => prioritizedQuery.data ?? [],
+    [prioritizedQuery.data]
+  );
 
-      .then((data: CVE[]) => {
+  const vulnerabilityLoading = prioritizedQuery.isLoading;
 
-        // The browser receives only a bounded recent dataset.
-        // Global KPI values come from /vulnerabilities/risk-summary.
-        // Keep the calculations below for the recent-dataset chart.
+  const riskSummaryQuery = useQuery({
+    queryKey: ["vulnerabilities", "risk-summary"],
+    queryFn: ({ signal }) =>
+      fetchJson<RiskSummary>("/vulnerabilities/risk-summary", signal),
+  });
 
+  // Always show what the API actually returned. An empty database
+  // shows zeros, never a stored snapshot.
+  const riskSummary = useMemo<RiskSummary>(
+    () => normalizeRiskSummary(riskSummaryQuery.data),
+    [riskSummaryQuery.data]
+  );
 
-        const severityCounts = {
+  const correlationGraphQuery = useQuery({
+    queryKey: ["correlations", "graph", 12],
+    queryFn: ({ signal }) =>
+      fetchJson<CorrelationGraphResponse>(
+        "/correlations/graph?limit=12",
+        signal
+      ),
+  });
 
-          CRITICAL:
-            data.filter(
-              (cve) =>
-                cve.severity ===
-                "CRITICAL"
-            ).length,
-
-          HIGH:
-            data.filter(
-              (cve) =>
-                cve.severity ===
-                "HIGH"
-            ).length,
-
-          MEDIUM:
-            data.filter(
-              (cve) =>
-                cve.severity ===
-                "MEDIUM"
-            ).length,
-
-          LOW:
-            data.filter(
-              (cve) =>
-                cve.severity ===
-                "LOW"
-            ).length,
-
-          UNKNOWN:
-            data.filter(
-              (cve) =>
-                !cve.severity ||
-                ![
-                  "CRITICAL",
-                  "HIGH",
-                  "MEDIUM",
-                  "LOW",
-                ].includes(
-                  cve.severity
-                )
-            ).length,
-        };
-
-
-        setSeverityData([
-          {
-            name: "Critical",
-            value:
-              severityCounts.CRITICAL,
-          },
-          {
-            name: "High",
-            value:
-              severityCounts.HIGH,
-          },
-          {
-            name: "Medium",
-            value:
-              severityCounts.MEDIUM,
-          },
-          {
-            name: "Low",
-            value:
-              severityCounts.LOW,
-          },
-          {
-            name: "Unknown",
-            value:
-              severityCounts.UNKNOWN,
-          },
-        ]);
-      })
-
-      .catch((error) => {
-
-        console.error(
-          "Failed to fetch CVEs:",
-          error
-        );
-      });
-
-  }, []);
-
+  const correlationGraph = correlationGraphQuery.data ?? null;
+  const correlationGraphLoading = correlationGraphQuery.isLoading;
+  const correlationGraphError = correlationGraphQuery.error
+    ? correlationGraphQuery.error.message
+    : null;
 
   /* ==========================================================
-     FETCH PRIORITIZED VULNERABILITIES
+     THREAT INTELLIGENCE DATA
      ========================================================== */
 
-  useEffect(() => {
+  const threatEventsQuery = useQuery({
+    queryKey: ["threat-intelligence", 30],
+    queryFn: ({ signal }) =>
+      fetchJson<ThreatEvent[]>("/threat-intelligence?limit=30", signal),
+  });
 
-    setVulnerabilityLoading(
-      true
-    );
+  const threatSummaryQuery = useQuery({
+    queryKey: ["threat-intelligence", "summary"],
+    queryFn: ({ signal }) =>
+      fetchJson<ThreatSummary>("/threat-intelligence/summary", signal),
+  });
 
+  const threatEvents = useMemo(
+    () => threatEventsQuery.data ?? [],
+    [threatEventsQuery.data]
+  );
 
-    fetch(
-      `${API_BASE_URL}/vulnerabilities/prioritized?limit=10`
-    )
-      .then((response) => {
+  const threatSummary = useMemo<ThreatSummary>(
+    () =>
+      threatSummaryQuery.data ?? {
+        total: 0,
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        event_types: {},
+        sources: {},
+      },
+    [threatSummaryQuery.data]
+  );
 
-        if (!response.ok) {
+  const threatLoading =
+    threatEventsQuery.isLoading || threatSummaryQuery.isLoading;
 
-          throw new Error(
-            "Failed to fetch prioritized vulnerabilities"
-          );
-        }
+  const intelligenceAnalysisQuery = useQuery({
+    queryKey: ["intelligence-analysis"],
+    queryFn: ({ signal }) =>
+      fetchJson<IntelligenceAnalysis>("/intelligence-analysis", signal),
+  });
 
-        return response.json();
-      })
+  const intelligenceAnalysis = intelligenceAnalysisQuery.data ?? null;
+  const intelligenceAnalysisLoading = intelligenceAnalysisQuery.isLoading;
 
-      .then(
-        (
-          data: PrioritizedVulnerability[]
-        ) => {
+  const mitreAttackQuery = useQuery({
+    queryKey: ["mitre-attack", "analysis"],
+    queryFn: ({ signal }) =>
+      fetchJson<MitreAttackAnalysis>("/mitre-attack/analysis", signal),
+  });
 
-          setPrioritizedVulnerabilities(
-            data
-          );
-        }
-      )
-
-      .catch((error) => {
-
-        console.error(
-          "Failed to fetch prioritized vulnerabilities:",
-          error
-        );
-      })
-
-      .finally(() => {
-
-        setVulnerabilityLoading(
-          false
-        );
-      });
-
-  }, []);
-
+  const mitreAttackAnalysis = mitreAttackQuery.data ?? null;
+  const mitreAttackLoading = mitreAttackQuery.isLoading;
 
   /* ==========================================================
-     FETCH RISK SUMMARY
+     API STATUS
+     First failed query, shown in a banner so a dead backend is
+     visible instead of looking like an empty dashboard.
      ========================================================== */
 
-  useEffect(() => {
+  const apiError =
+    [
+      cvesQuery,
+      prioritizedQuery,
+      riskSummaryQuery,
+      correlationGraphQuery,
+      threatEventsQuery,
+      threatSummaryQuery,
+      intelligenceAnalysisQuery,
+      mitreAttackQuery,
+    ].find((query) => query.isError)?.error ?? null;
 
-    fetch(
-      `${API_BASE_URL}/vulnerabilities/risk-summary`
-    )
-      .then((response) => {
-
-        if (!response.ok) {
-
-          throw new Error(
-            "Failed to fetch risk summary"
-          );
-        }
-
-        return response.json();
-      })
-
-      .then((data: RiskSummary) => {
-        const normalized: RiskSummary = {
-          critical: Number(data.critical ?? 0),
-          high: Number(data.high ?? 0),
-          medium: Number(data.medium ?? 0),
-          low: Number(data.low ?? 0),
-          known_exploited: Number(data.known_exploited ?? 0),
-          total: Number(data.total ?? 0),
-          nvd_critical: Number(data.nvd_critical ?? 0),
-          nvd_high: Number(data.nvd_high ?? 0),
-          nvd_medium: Number(data.nvd_medium ?? 0),
-          nvd_low: Number(data.nvd_low ?? 0),
-          priority_risks: Number(data.priority_risks ?? 0),
-        };
-
-        // Keep the current database snapshot visible if the API returns an empty
-        // payload during backend startup; a non-empty API response always wins.
-        if (normalized.total > 0) {
-          setRiskSummary(normalized);
-        }
-      })
-
-      .catch((error) => {
-
-        console.error(
-          "Failed to fetch risk summary:",
-          error
-        );
-      });
-
-  }, []);
-
-
-  /* ==========================================================
-     FETCH CORRELATION GRAPH
-     ========================================================== */
-
-  useEffect(() => {
-    setCorrelationGraphLoading(true);
-    setCorrelationGraphError(null);
-
-    fetch(
-      `${API_BASE_URL}/correlations/graph?limit=12`
-    )
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(
-            `Correlation graph HTTP ${response.status}`
-          );
-        }
-
-        return response.json();
-      })
-      .then((data: CorrelationGraphResponse) => {
-        setCorrelationGraph(data);
-      })
-      .catch((error) => {
-        console.error(
-          "Failed to fetch correlation graph:",
-          error
-        );
-        setCorrelationGraphError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load correlation intelligence."
-        );
-      })
-      .finally(() => {
-        setCorrelationGraphLoading(false);
-      });
-  }, []);
-
-
-  /* ==========================================================
-     FETCH THREAT INTELLIGENCE
-     ========================================================== */
-
-  useEffect(() => {
-
-    setThreatLoading(true);
-
-
-    Promise.all([
-
-      fetch(
-        `${API_BASE_URL}/threat-intelligence?limit=30`
-      ).then((response) => {
-
-        if (!response.ok) {
-
-          throw new Error(
-            "Failed to fetch threat intelligence"
-          );
-        }
-
-        return response.json();
-      }),
-
-
-      fetch(
-        `${API_BASE_URL}/threat-intelligence/summary`
-      ).then((response) => {
-
-        if (!response.ok) {
-
-          throw new Error(
-            "Failed to fetch threat intelligence summary"
-          );
-        }
-
-        return response.json();
-      }),
-
-    ])
-
-      .then(
-        ([events, summary]) => {
-
-          setThreatEvents(
-            events
-          );
-
-          setThreatSummary(
-            summary
-          );
-        }
-      )
-
-      .catch((error) => {
-
-        console.error(
-          "Failed to fetch threat intelligence:",
-          error
-        );
-      })
-
-      .finally(() => {
-
-        setThreatLoading(
-          false
-        );
-      });
-
-  }, []);
-
-
-  /* ==========================================================
-     FETCH INTELLIGENCE ANALYSIS
-     ========================================================== */
-
-  useEffect(() => {
-
-    setIntelligenceAnalysisLoading(true);
-
-    fetch(
-      `${API_BASE_URL}/intelligence-analysis`
-    )
-      .then((response) => {
-
-        if (!response.ok) {
-          throw new Error(
-            "Failed to fetch intelligence analysis"
-          );
-        }
-
-        return response.json();
-      })
-      .then((data: IntelligenceAnalysis) => {
-        setIntelligenceAnalysis(data);
-      })
-      .catch((error) => {
-        console.error(
-          "Failed to fetch intelligence analysis:",
-          error
-        );
-      })
-      .finally(() => {
-        setIntelligenceAnalysisLoading(false);
-      });
-
-  }, []);
-
-
-  /* ==========================================================
-     FETCH MITRE ATT&CK ANALYSIS
-     ========================================================== */
-
-  useEffect(() => {
-
-    setMitreAttackLoading(true);
-
-    fetch(
-      `${API_BASE_URL}/mitre-attack/analysis`
-    )
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(
-            "Failed to fetch MITRE ATT&CK analysis"
-          );
-        }
-        return response.json();
-      })
-      .then((data: MitreAttackAnalysis) => {
-        setMitreAttackAnalysis(data);
-      })
-      .catch((error) => {
-        console.error(
-          "Failed to fetch MITRE ATT&CK analysis:",
-          error
-        );
-      })
-      .finally(() => {
-        setMitreAttackLoading(false);
-      });
-
-  }, []);
+  const databaseEmpty =
+    riskSummaryQuery.isSuccess && riskSummary.total === 0;
 
 
   /* ==========================================================
@@ -939,7 +679,7 @@ function App() {
 
 
     fetch(
-      `${API_BASE_URL}/vulnerabilities/risk-debug/${vulnerability.cve_id}`
+      `${API_BASE_URL}/vulnerabilities/risk-debug/${encodeURIComponent(vulnerability.cve_id)}`
     )
       .then((response) => {
 
@@ -1181,86 +921,19 @@ function App() {
      TIMELINE
      ========================================================== */
 
-  const [timelineData, setTimelineData] =
-    useState<TimelineData[]>([]);
+  const timelineQuery = useQuery({
+    queryKey: ["vulnerabilities", "timeline", selectedRange],
+    queryFn: ({ signal }) =>
+      fetchJson<{ date: string; count: number }[]>(
+        `/vulnerabilities/timeline?days=${selectedRange}`,
+        signal
+      ),
+  });
 
-
-  useEffect(() => {
-
-    fetch(
-      `${API_BASE_URL}/vulnerabilities/timeline?days=${selectedRange}`
-    )
-      .then((response) => {
-
-        if (!response.ok) {
-          throw new Error(
-            "Failed to fetch vulnerability timeline"
-          );
-        }
-
-        return response.json();
-      })
-      .then((data: { date: string; count: number }[]) => {
-
-        // The backend returns only dates that contain CVEs. Build a contiguous
-        // calendar series so each range represents the requested number of
-        // calendar days instead of collapsing to active dates only.
-        const countsByDate = new Map(
-          data.map((item) => [item.date, Number(item.count) || 0])
-        );
-
-        const validDates = data
-          .map((item) => item.date)
-          .filter(Boolean)
-          .sort();
-
-        if (validDates.length === 0) {
-          setTimelineData([]);
-          return;
-        }
-
-        const end = new Date(
-          `${validDates[validDates.length - 1]}T00:00:00`
-        );
-        const timeline: TimelineData[] = [];
-
-        for (let offset = selectedRange - 1; offset >= 0; offset -= 1) {
-          const date = new Date(end);
-          date.setDate(end.getDate() - offset);
-
-          const isoDate = [
-            date.getFullYear(),
-            String(date.getMonth() + 1).padStart(2, "0"),
-            String(date.getDate()).padStart(2, "0"),
-          ].join("-");
-
-          const count = countsByDate.get(isoDate) ?? 0;
-          const recentCounts = timeline
-            .slice(Math.max(0, timeline.length - 6))
-            .map((item) => item.count);
-          const movingValues = [...recentCounts, count];
-          const movingAverage =
-            movingValues.reduce((sum, value) => sum + value, 0) /
-            movingValues.length;
-
-          timeline.push({
-            date: isoDate,
-            count,
-            movingAverage: Number(movingAverage.toFixed(1)),
-          });
-        }
-
-        setTimelineData(timeline);
-      })
-      .catch((error) => {
-        console.error(
-          "Failed to fetch vulnerability timeline:",
-          error
-        );
-        setTimelineData([]);
-      });
-
-  }, [selectedRange]);
+  const timelineData = useMemo(
+    () => buildTimeline(timelineQuery.data ?? [], selectedRange),
+    [timelineQuery.data, selectedRange]
+  );
 
 
   /* ==========================================================
@@ -1312,7 +985,7 @@ function App() {
 
         <div className="logo">
 
-          <span>ðŸ›¡</span>
+          <span>🛡</span>
 
           <div>
 
@@ -1375,6 +1048,20 @@ function App() {
           ===================================================== */}
 
       <main className="main" id="overview">
+
+        {apiError && (
+          <div className="api-status-banner api-status-error" role="alert">
+            Cannot load data from the API at {API_BASE_URL}. Check the backend
+            is running. ({apiError.message})
+          </div>
+        )}
+
+        {!apiError && databaseEmpty && (
+          <div className="api-status-banner api-status-warning" role="status">
+            The API is running but the database is empty. Run the ingest
+            scripts listed in the README, then reload.
+          </div>
+        )}
 
         <header className="topbar">
 
@@ -1439,7 +1126,7 @@ function App() {
             </h2>
 
             <span>
-              Full database Â· NVD severity: CRITICAL
+              Full database · NVD severity: CRITICAL
             </span>
 
           </div>
@@ -1456,7 +1143,7 @@ function App() {
             </h2>
 
             <span>
-              Full database Â· CISA KEV matches
+              Full database · CISA KEV matches
             </span>
 
           </div>
@@ -1473,7 +1160,7 @@ function App() {
             </h2>
 
             <span>
-              Full database Â· derived CRITICAL + HIGH
+              Full database · derived CRITICAL + HIGH
             </span>
 
           </div>
@@ -2185,12 +1872,12 @@ function App() {
               <div>
                 <h2>Correlation Intelligence</h2>
                 <div className="chart-subtitle">
-                  CISA advisory â†’ CVE â†’ KEV â†’ derived risk
+                  CISA advisory → CVE → KEV → derived risk
                 </div>
               </div>
 
               <span className="cti-source-label">
-                EXPLICIT CVE LINKS â€¢ DERIVED
+                EXPLICIT CVE LINKS • DERIVED
               </span>
             </div>
 
@@ -2366,7 +2053,7 @@ function App() {
                                 </strong>
                               </div>
 
-                              <span style={{ opacity: 0.3 }}>â†’</span>
+                              <span style={{ opacity: 0.3 }}>→</span>
 
                               <span
                                 style={{
@@ -2419,7 +2106,7 @@ function App() {
                                   opacity: 0.35,
                                 }}
                               >
-                                â†’
+                                →
                               </div>
 
                               <div
@@ -2513,7 +2200,7 @@ function App() {
                                             : "N/A"}
                                         </span>
 
-                                        <span>â€¢</span>
+                                        <span>•</span>
 
                                         <span>
                                           Risk{" "}
@@ -2600,7 +2287,7 @@ function App() {
 
 
               <span className="cti-source-label">
-                CISA â€¢ LIVE FEED
+                CISA • LIVE FEED
               </span>
 
             </div>
@@ -2732,7 +2419,7 @@ function App() {
                             color: "#cbd5e1",
                           }}
                         >
-                          {type} Â· {count}
+                          {type} · {count}
                         </span>
 
                       )
@@ -3055,7 +2742,7 @@ function App() {
 
 
                           <span>
-                            â€¢
+                            •
                           </span>
 
 
@@ -3072,7 +2759,7 @@ function App() {
 
                             <>
                               <span>
-                                â€¢
+                                •
                               </span>
 
                               <span>
@@ -3105,7 +2792,7 @@ function App() {
 
                           VIEW CISA
                           <span>
-                            â†—
+                            ↗
                           </span>
 
                         </a>
@@ -3158,7 +2845,7 @@ function App() {
               </div>
 
               <span className="cti-source-label">
-                CISA + NVD + KEV â€¢ DERIVED
+                CISA + NVD + KEV • DERIVED
               </span>
             </div>
 
@@ -3459,7 +3146,7 @@ function App() {
               </div>
 
               <span className="cti-source-label">
-                CISA + MITRE ATT&CK â€¢ DERIVED
+                CISA + MITRE ATT&CK • DERIVED
               </span>
             </div>
 
@@ -3824,7 +3511,7 @@ function App() {
               }}
                 aria-label="Close threat intelligence details"
               >
-                Ã—
+                ×
               </button>
             </div>
 
@@ -4091,7 +3778,7 @@ function App() {
                   rel="noreferrer"
                 >
                   OPEN ORIGINAL CISA ADVISORY
-                  <span>â†—</span>
+                  <span>↗</span>
                 </a>
               </div>
             )}
@@ -4142,7 +3829,7 @@ function App() {
                 onClick={closeCVE}
                 aria-label="Close vulnerability details"
               >
-                Ã—
+                ×
               </button>
 
             </div>
@@ -4299,7 +3986,7 @@ selectedCVE.cvss_score !== undefined
 riskDebug.cvss_score !== undefined
   ? `CVSS ${riskDebug.cvss_score.toFixed(
       1
-    )} Ã— 60%`
+    )} × 60%`
   : "No CVSS score"}
 
                       </span>
@@ -4524,8 +4211,6 @@ riskDebug.cvss_score !== undefined
 
 
 export default App;
-
-
 
 
 

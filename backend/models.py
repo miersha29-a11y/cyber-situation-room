@@ -99,3 +99,46 @@ class ThreatEvent(Base):
     )
 
     advisory_type = Column(String)
+
+class AttackTechnique(Base):
+    """
+    MITRE ATT&CK Enterprise techniques.
+
+    Populated by ingest_attack.py. Defined here so that
+    Base.metadata.create_all() creates the table on first start,
+    which stops /mitre-attack/analysis returning 500 before the
+    ingest script has been run. Columns match the CREATE TABLE
+    statement in ingest_attack.py.
+    """
+    __tablename__ = "attack_techniques"
+
+    id = Column(
+        Integer,
+        primary_key=True
+    )
+
+    attack_id = Column(
+        Text,
+        unique=True,
+        nullable=False
+    )
+
+    name = Column(
+        Text,
+        nullable=False
+    )
+
+    description = Column(Text)
+
+    tactics = Column(Text)
+
+    url = Column(Text)
+
+    version = Column(Text)
+
+    source_updated = Column(Text)
+
+    is_subtechnique = Column(
+        Integer,
+        default=0
+    )

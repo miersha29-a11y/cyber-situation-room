@@ -77,3 +77,7 @@ frontend/App_latest_*.tsx
 frontend/App_master_*.tsx
 frontend/App_mitre_*.tsx
 
+
+# Local backup copies of source files
+frontend/src/*_before_*.tsx
+frontend/src/*.bak
