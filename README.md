@@ -105,7 +105,7 @@ cyber-situation-room/
 
 ## Getting Started
 
-Tested with Python 3.12 and Node.js 22. Other versions may work but have not been checked.
+Tested with Python 3.12 and 3.14, and Node.js 22 and 24. Other versions may work but have not been checked.
 
 ### 1. Clone the repository
 
