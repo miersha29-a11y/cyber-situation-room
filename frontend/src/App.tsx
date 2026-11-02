@@ -1,3 +1,4 @@
+﻿import { API_BASE_URL } from './config';
 import { useEffect, useMemo, useState } from "react";
 import {
   PieChart,
@@ -479,7 +480,7 @@ function App() {
   useEffect(() => {
 
     fetch(
-      "http://127.0.0.1:8000/cves?limit=500"
+      `${API_BASE_URL}/cves?limit=500`
     )
       .then((response) => {
 
@@ -597,7 +598,7 @@ function App() {
 
 
     fetch(
-      "http://127.0.0.1:8000/vulnerabilities/prioritized?limit=10"
+      `${API_BASE_URL}/vulnerabilities/prioritized?limit=10`
     )
       .then((response) => {
 
@@ -647,7 +648,7 @@ function App() {
   useEffect(() => {
 
     fetch(
-      "http://127.0.0.1:8000/vulnerabilities/risk-summary"
+      `${API_BASE_URL}/vulnerabilities/risk-summary`
     )
       .then((response) => {
 
@@ -703,7 +704,7 @@ function App() {
     setCorrelationGraphError(null);
 
     fetch(
-      "http://127.0.0.1:8000/correlations/graph?limit=12"
+      `${API_BASE_URL}/correlations/graph?limit=12`
     )
       .then((response) => {
         if (!response.ok) {
@@ -746,7 +747,7 @@ function App() {
     Promise.all([
 
       fetch(
-        "http://127.0.0.1:8000/threat-intelligence?limit=30"
+        `${API_BASE_URL}/threat-intelligence?limit=30`
       ).then((response) => {
 
         if (!response.ok) {
@@ -761,7 +762,7 @@ function App() {
 
 
       fetch(
-        "http://127.0.0.1:8000/threat-intelligence/summary"
+        `${API_BASE_URL}/threat-intelligence/summary`
       ).then((response) => {
 
         if (!response.ok) {
@@ -816,7 +817,7 @@ function App() {
     setIntelligenceAnalysisLoading(true);
 
     fetch(
-      "http://127.0.0.1:8000/intelligence-analysis"
+      `${API_BASE_URL}/intelligence-analysis`
     )
       .then((response) => {
 
@@ -853,7 +854,7 @@ function App() {
     setMitreAttackLoading(true);
 
     fetch(
-      "http://127.0.0.1:8000/mitre-attack/analysis"
+      `${API_BASE_URL}/mitre-attack/analysis`
     )
       .then((response) => {
         if (!response.ok) {
@@ -890,7 +891,7 @@ function App() {
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:8000/threat-intelligence/${event.id}/correlations`
+        `${API_BASE_URL}/threat-intelligence/${event.id}/correlations`
       );
 
       if (!response.ok) {
@@ -938,7 +939,7 @@ function App() {
 
 
     fetch(
-      `http://127.0.0.1:8000/vulnerabilities/risk-debug/${vulnerability.cve_id}`
+      `${API_BASE_URL}/vulnerabilities/risk-debug/${vulnerability.cve_id}`
     )
       .then((response) => {
 
@@ -1033,7 +1034,7 @@ function App() {
   const cveId = encodeURIComponent(cve.label);
 
   const riskRequest = fetch(
-    `http://127.0.0.1:8000/vulnerabilities/risk-debug/${cveId}`
+    `${API_BASE_URL}/vulnerabilities/risk-debug/${cveId}`
   ).then((response) => {
     if (!response.ok) {
       throw new Error(`Risk debug HTTP ${response.status}`);
@@ -1187,7 +1188,7 @@ function App() {
   useEffect(() => {
 
     fetch(
-      `http://127.0.0.1:8000/vulnerabilities/timeline?days=${selectedRange}`
+      `${API_BASE_URL}/vulnerabilities/timeline?days=${selectedRange}`
     )
       .then((response) => {
 
@@ -1311,7 +1312,7 @@ function App() {
 
         <div className="logo">
 
-          <span>🛡</span>
+          <span>ðŸ›¡</span>
 
           <div>
 
@@ -1438,7 +1439,7 @@ function App() {
             </h2>
 
             <span>
-              Full database · NVD severity: CRITICAL
+              Full database Â· NVD severity: CRITICAL
             </span>
 
           </div>
@@ -1455,7 +1456,7 @@ function App() {
             </h2>
 
             <span>
-              Full database · CISA KEV matches
+              Full database Â· CISA KEV matches
             </span>
 
           </div>
@@ -1472,7 +1473,7 @@ function App() {
             </h2>
 
             <span>
-              Full database · derived CRITICAL + HIGH
+              Full database Â· derived CRITICAL + HIGH
             </span>
 
           </div>
@@ -2184,12 +2185,12 @@ function App() {
               <div>
                 <h2>Correlation Intelligence</h2>
                 <div className="chart-subtitle">
-                  CISA advisory → CVE → KEV → derived risk
+                  CISA advisory â†’ CVE â†’ KEV â†’ derived risk
                 </div>
               </div>
 
               <span className="cti-source-label">
-                EXPLICIT CVE LINKS • DERIVED
+                EXPLICIT CVE LINKS â€¢ DERIVED
               </span>
             </div>
 
@@ -2365,7 +2366,7 @@ function App() {
                                 </strong>
                               </div>
 
-                              <span style={{ opacity: 0.3 }}>→</span>
+                              <span style={{ opacity: 0.3 }}>â†’</span>
 
                               <span
                                 style={{
@@ -2418,7 +2419,7 @@ function App() {
                                   opacity: 0.35,
                                 }}
                               >
-                                →
+                                â†’
                               </div>
 
                               <div
@@ -2512,7 +2513,7 @@ function App() {
                                             : "N/A"}
                                         </span>
 
-                                        <span>•</span>
+                                        <span>â€¢</span>
 
                                         <span>
                                           Risk{" "}
@@ -2599,7 +2600,7 @@ function App() {
 
 
               <span className="cti-source-label">
-                CISA • LIVE FEED
+                CISA â€¢ LIVE FEED
               </span>
 
             </div>
@@ -2731,7 +2732,7 @@ function App() {
                             color: "#cbd5e1",
                           }}
                         >
-                          {type} · {count}
+                          {type} Â· {count}
                         </span>
 
                       )
@@ -3054,7 +3055,7 @@ function App() {
 
 
                           <span>
-                            •
+                            â€¢
                           </span>
 
 
@@ -3071,7 +3072,7 @@ function App() {
 
                             <>
                               <span>
-                                •
+                                â€¢
                               </span>
 
                               <span>
@@ -3104,7 +3105,7 @@ function App() {
 
                           VIEW CISA
                           <span>
-                            ↗
+                            â†—
                           </span>
 
                         </a>
@@ -3157,7 +3158,7 @@ function App() {
               </div>
 
               <span className="cti-source-label">
-                CISA + NVD + KEV • DERIVED
+                CISA + NVD + KEV â€¢ DERIVED
               </span>
             </div>
 
@@ -3458,7 +3459,7 @@ function App() {
               </div>
 
               <span className="cti-source-label">
-                CISA + MITRE ATT&CK • DERIVED
+                CISA + MITRE ATT&CK â€¢ DERIVED
               </span>
             </div>
 
@@ -3823,7 +3824,7 @@ function App() {
               }}
                 aria-label="Close threat intelligence details"
               >
-                ×
+                Ã—
               </button>
             </div>
 
@@ -4090,7 +4091,7 @@ function App() {
                   rel="noreferrer"
                 >
                   OPEN ORIGINAL CISA ADVISORY
-                  <span>↗</span>
+                  <span>â†—</span>
                 </a>
               </div>
             )}
@@ -4141,7 +4142,7 @@ function App() {
                 onClick={closeCVE}
                 aria-label="Close vulnerability details"
               >
-                ×
+                Ã—
               </button>
 
             </div>
@@ -4298,7 +4299,7 @@ selectedCVE.cvss_score !== undefined
 riskDebug.cvss_score !== undefined
   ? `CVSS ${riskDebug.cvss_score.toFixed(
       1
-    )} × 60%`
+    )} Ã— 60%`
   : "No CVSS score"}
 
                       </span>
@@ -4523,6 +4524,8 @@ riskDebug.cvss_score !== undefined
 
 
 export default App;
+
+
 
 
 
