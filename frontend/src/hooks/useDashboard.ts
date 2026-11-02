@@ -1,8 +1,11 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { API_BASE_URL, fetchJson } from "../api";
 import { buildSeverityData, normalizeRiskSummary, buildTimeline } from "../lib/transform";
 import type { CVE, SeverityData, RangeOption, PrioritizedVulnerability, RiskSummary, CorrelationGraphNode, CorrelationGraphResponse, RiskDebug, ThreatEvent, ThreatSummary, ThreatCorrelation, MitreAttackAnalysis, IntelligenceAnalysis, ConnectionStatus } from "../types";
+
+// How often the dashboard checks that the API is still reachable.
+const HEALTH_POLL_INTERVAL_MS = 10_000;
 
 /*
  * All dashboard state, server data and event handlers.
@@ -202,11 +205,35 @@ export function useDashboard() {
 
   /* ==========================================================
      API STATUS
-     First failed query, shown in a banner so a dead backend is
-     visible instead of looking like an empty dashboard.
+     /health is polled so the dashboard notices the backend
+     going down (or coming back) without a page reload. The
+     data queries only run on load, so they cannot do this.
      ========================================================== */
 
-  const apiError =
+  const queryClient = useQueryClient();
+
+  const healthQuery = useQuery({
+    queryKey: ["health"],
+    queryFn: ({ signal }) =>
+      fetchJson<{ status: string }>("/health", signal),
+    refetchInterval: HEALTH_POLL_INTERVAL_MS,
+    staleTime: 0,
+    retry: false,
+  });
+
+  const apiReachable = healthQuery.isSuccess;
+
+  // When the API becomes reachable again, retry any data that failed
+  // while it was down, so the dashboard recovers on its own.
+  useEffect(() => {
+    if (apiReachable) {
+      void queryClient.refetchQueries({
+        predicate: (query) => query.state.status === "error",
+      });
+    }
+  }, [apiReachable, queryClient]);
+
+  const dataError =
     [
       cvesQuery,
       prioritizedQuery,
@@ -217,6 +244,9 @@ export function useDashboard() {
       intelligenceAnalysisQuery,
       mitreAttackQuery,
     ].find((query) => query.isError)?.error ?? null;
+
+  // A failed health check takes priority: it explains every other failure.
+  const apiError = healthQuery.error ?? dataError;
 
   const databaseEmpty =
     riskSummaryQuery.isSuccess && riskSummary.total === 0;
@@ -592,13 +622,15 @@ export function useDashboard() {
     mitreAttackQuery,
   ].some((query) => query.isLoading);
 
-  const connectionStatus: ConnectionStatus = apiError
+  const connectionStatus: ConnectionStatus = healthQuery.isError
     ? "offline"
-    : anyLoading
-      ? "connecting"
-      : databaseEmpty
-        ? "empty"
-        : "online";
+    : dataError
+      ? "degraded"
+      : healthQuery.isPending || anyLoading
+        ? "connecting"
+        : databaseEmpty
+          ? "empty"
+          : "online";
 
   return {
     scrollToSection,

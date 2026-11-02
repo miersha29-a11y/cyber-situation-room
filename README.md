@@ -202,7 +202,7 @@ Checked against a fresh clone (Python 3.12, Node.js 22):
 - `python -m pytest` passes: 46 automated API tests (see "Running the tests").
 - `npm run build` and `npm run lint` complete with no errors.
 - `npm audit --omit=dev` and `pip-audit` reported no known vulnerabilities at the time of checking.
-- The dashboard was exercised in headless Chromium in three states: API stopped (error banner and red status indicators), API running with an empty database (ingest prompt and amber indicators), and API running with sample data (KPIs, charts, 7/30/90-day range switching, and the CVE and advisory detail panels all load with no console errors).
+- The dashboard was exercised in headless Chromium in four states: API stopped (error banner and red status indicators), API stopped and restarted while the page is open (detected both ways within about 10 seconds, no reload needed), API running with an empty database (ingest prompt and amber indicators), and API running with sample data (KPIs, charts, 7/30/90-day range switching, and the CVE and advisory detail panels all load with no console errors).
 
 Not yet covered: there are no automated frontend tests, and live ingestion from NVD and CISA depends on those services being reachable.
 

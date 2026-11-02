@@ -127,6 +127,8 @@ nav a:hover {
   background: #f59e0b;
 }
 
+.status-dot.is-degraded,
+.live-dot.is-degraded,
 .status-dot.is-offline,
 .live-dot.is-offline {
   background: #ef4444;

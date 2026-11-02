@@ -228,4 +228,9 @@ export type IntelligenceAnalysis = {
   unmatched_cves: string[];
 };
 
-export type ConnectionStatus = "connecting" | "online" | "empty" | "offline";
+export type ConnectionStatus =
+  | "connecting"
+  | "online"
+  | "empty"
+  | "degraded"
+  | "offline";
