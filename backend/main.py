@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import re
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text, bindparam
@@ -623,10 +623,10 @@ def get_risk_debug(
     )
 
     if not cve:
-
-        return {
-            "error": "CVE not found"
-        }
+        raise HTTPException(
+            status_code=404,
+            detail="CVE not found"
+        )
 
     components = (
         calculate_risk_components(
@@ -751,11 +751,10 @@ def get_threat_correlations(
     )
 
     if not event:
-        return {
-            "event_id": event_id,
-            "cve_ids": [],
-            "correlations": []
-        }
+        raise HTTPException(
+            status_code=404,
+            detail="Threat event not found"
+        )
 
     text_blob = f"{event.title or ''} {event.description or ''}"
 
@@ -1471,7 +1470,10 @@ def get_threat_attack_mappings(
     )
 
     if not event:
-        return {"event_id": event_id, "mappings": []}
+        raise HTTPException(
+            status_code=404,
+            detail="Threat event not found"
+        )
 
     text_blob = normalize_attack_text(
         f"{event.title or ''} {event.description or ''}"

@@ -76,26 +76,32 @@ GET /correlations/graph?limit=12
 
 ## Project Structure
 
+```
 cyber-situation-room/
   backend/
-    main.py
-    database.py
-    models.py
-    ingest_cves.py
-    ingest_cisa.py
-    ingest_attack.py
-    enrich_kev.py
-    cleanup_old_cves.py
+    main.py                  FastAPI app and all API routes
+    database.py              SQLAlchemy engine (DATABASE_URL overridable)
+    models.py                CVE, ThreatEvent, Source, AttackTechnique tables
+    ingest_cves.py           NVD CVE ingestion
+    enrich_kev.py            CISA KEV enrichment
+    ingest_cisa.py           CISA advisory ingestion
+    ingest_attack.py         MITRE ATT&CK Enterprise ingestion
+    cleanup_old_cves.py      Optional: deletes CVEs not published in 2026
     requirements.txt
+    requirements-dev.txt     Test dependencies
+    tests/                   pytest API test suite
   frontend/
     src/
-      App.tsx
-      App.css
+      main.tsx               Entry point and React Query client
+      App.tsx                Page layout
+      api.ts, config.ts      API base URL and fetch helper
+      types.ts               API response types
+      hooks/useDashboard.ts  Server data (React Query), UI state, handlers
+      components/            One component per dashboard section
+      lib/                   Formatting, data shaping, status labels
       index.css
-      main.tsx
-      api.ts
   README.md
-  .gitignore
+```
 
 ## Getting Started
 
@@ -169,6 +175,17 @@ The frontend calls the API at `http://127.0.0.1:8000` by default. To point it so
 
 Open http://localhost:5173. The API only accepts browser requests from this origin (see CORS settings in `backend/main.py`).
 
+### Running the tests
+
+From the `backend` folder with the virtual environment active:
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+The suite runs against a temporary database and never touches `cyber_situation_room.db`. It covers every route on an empty and a seeded database, risk scoring and prioritisation, advisory-to-CVE correlation, ATT&CK mapping, 404s for unknown records, rejection of malformed input, limit clamping, and the CORS policy.
+
 ### Production build
 
 ```bash
@@ -182,12 +199,12 @@ The output is written to `frontend/dist/`.
 
 Checked against a fresh clone (Python 3.12, Node.js 22):
 
-- The backend installs from `requirements.txt`, and every endpoint above returns HTTP 200 both on an empty database and on a small test dataset.
+- `python -m pytest` passes: 46 automated API tests (see "Running the tests").
 - `npm run build` and `npm run lint` complete with no errors.
 - `npm audit --omit=dev` and `pip-audit` reported no known vulnerabilities at the time of checking.
-- The dashboard was exercised in headless Chromium in three states: API stopped (error banner shown), API running with an empty database (ingest prompt shown), and API running with sample data (KPIs, charts, 7/30/90-day range switching, and the CVE and advisory detail panels all load with no console errors).
+- The dashboard was exercised in headless Chromium in three states: API stopped (error banner and red status indicators), API running with an empty database (ingest prompt and amber indicators), and API running with sample data (KPIs, charts, 7/30/90-day range switching, and the CVE and advisory detail panels all load with no console errors).
 
-Not yet covered: there is no automated test suite in the repository, and live ingestion from NVD and CISA depends on those services being reachable.
+Not yet covered: there are no automated frontend tests, and live ingestion from NVD and CISA depends on those services being reachable.
 
 ## Security Focus
 

@@ -117,6 +117,21 @@ nav a:hover {
   margin-right: 0;
 }
 
+.status-dot.is-connecting,
+.live-dot.is-connecting {
+  background: #7f8ba3;
+}
+
+.status-dot.is-empty,
+.live-dot.is-empty {
+  background: #f59e0b;
+}
+
+.status-dot.is-offline,
+.live-dot.is-offline {
+  background: #ef4444;
+}
+
 /* =========================================================
    MAIN
    ========================================================= */
